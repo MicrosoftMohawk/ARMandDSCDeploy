@@ -1,0 +1,1 @@
+New-AzureRMResourceGroup -Name "AzureARMTesting" -Location "eastus2"
