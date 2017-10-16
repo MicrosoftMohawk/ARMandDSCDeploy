@@ -1,0 +1,219 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "labDomainName": {
+            "type": "string",
+            "defaultValue": "domain.local",
+            "minLength": 6,
+            "maxLength": 24,
+            "metadata": {
+                "description": "A two-level DNS name for the domain (e.g. domain.local)"
+            }
+        },
+        "labAdminUsername": {
+            "type": "string",
+            "metadata": {
+                "description": "This username is used for the local administrator of every VM as well as the domain admin account"
+            }
+        },
+        "labAdminPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "This password is used for the local administrator of every VM as well as the domain admin account"
+            }
+        },
+        "labTimeZone": {
+            "type": "string",
+            "metadata": {
+                "description": "This timezone is used for all resources in the lab"
+            },
+            "allowedValues": [
+                "Eastern Standard Time",
+                "Pacific Standard Time"
+            ],
+            "defaultValue": "Eastern Standard Time"
+        },
+        "domainControllerOSVersion": {
+            "type": "string",
+            "allowedValues": [
+                "2016-Datacenter",
+                "2012-R2-Datacenter"
+            ],
+            "metadata": {
+                "description": "The Windows OS Version of the Domain Controller(s)"
+            },
+            "defaultValue": "2016-Datacenter"
+        },
+        "numberofDomainControllers": {
+            "type": "int",
+            "allowedValues": [
+                1,
+                2,
+                3,
+                4
+            ],
+            "defaultValue": 1
+        }
+    },
+    "variables": {
+        "labPrefix": "lab",
+        "vnetId": "[resourceId(resourceGroup().Name,'Microsoft.Network/virtualNetworks', concat(variables('labPrefix'), 'Vnet'))]",
+        "subnetRef": "[concat(variables('vnetId'), '/subnets/', concat(variables('labPrefix'), 'Subnet1'))]",
+        "vmSize": "Standard_DS1_v2",
+        "availabilitySetId": "[if(greater(parameters('numberofDomainControllers'), 1), resourceID(resourceGroup().Name, 'Microsoft.Compute/AvailabilitySets/', 'dcAvailabilitySet'), json('null'))]" 
+    },
+    "resources": [
+        {
+            "apiVersion": "2017-06-01",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[concat(variables('labPrefix'), 'Vnet')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[concat(variables('labPrefix'), 'Subnet1')]",
+                        "properties": {
+                            "addressPrefix": "10.0.0.0/24"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "copy": {
+                "name": "dcNicCopy",
+                "count": "[parameters('numberofDomainControllers')]"
+            },
+            "name": "[concat('dc', copyIndex(1) ,'nic')]",
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2016-09-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('labprefix'), 'Vnet')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAddress": "[concat('10.0.0.', copyIndex(4))]",
+                            "privateIPAllocationMethod": "Static",
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "copy": {
+                "name": "dcCopy",
+                "count": "[parameters('numberofDomainControllers')]"
+            },
+            "name": "[concat('dc', copyIndex(1))]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2017-03-30",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "dcNicCopy"
+            ],
+            "properties": {
+                "osProfile": {
+                    "computerName": "[concat('dc', copyIndex(1))]",
+                    "adminUsername": "[parameters('labAdminUsername')]",
+                    "adminPassword": "[parameters('labAdminPassword')]",
+                    "windowsConfiguration": {
+                        "provisionVmAgent": "true",
+                        "timeZone": "[parameters('labTimeZone')]"
+                    }
+                },
+                "hardwareProfile": {
+                    "vmSize": "[variables('vmSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftWindowsServer",
+                        "offer": "WindowsServer",
+                        "sku": "[parameters('domainControllerOSVersion')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "fromImage",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    },
+                    "dataDisks": []
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat('dc', copyIndex(1) ,'nic'))]"
+                        }
+                    ]
+                },
+                "licenseType": "Windows_Server",
+                "availabilitySet": {
+                    "id": "[variables('availabilitySetId')]"
+                  }
+            },
+            "resources": [
+                {
+                    "condition": "[equals(copyIndex(1), 1)]",
+                    "type": "extensions",
+                    "name": "DSC.CreateAD",
+                    "apiVersion": "2017-03-30",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'dc', copyIndex(1))]"
+                    ],
+                    "properties": {
+                      "publisher": "Microsoft.Powershell",
+                      "type": "DSC",
+                      "typeHandlerVersion": "2.19",
+                      "autoUpgradeMinorVersion": true,
+                      "settings": {
+                        "ModulesUrl": "https://github.com/krjhitch/DSCartifacts/raw/master/packages/adlab.zip",
+                        "ConfigurationFunction": "adlab.ps1\\CreateFirst",
+                        "Properties": {
+                          "DomainName": "domain.local",
+                          "AdminCreds": {
+                            "UserName": "[parameters('labadminUsername')]",
+                            "Password": "PrivateSettingsRef:AdminPassword"
+                          }
+                        }
+                      },
+                      "protectedSettings": {
+                        "Items": {
+                          "AdminPassword": "[parameters('labadminPassword')]"
+                        }
+                      }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "[greater(parameters('numberofDomainControllers'), 1)]",
+            "name": "dcAvailabilitySet",
+            "type": "Microsoft.Compute/availabilitySets",
+            "apiVersion": "2017-03-30",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "platformUpdateDomainCount": 5,
+                "platformFaultDomainCount": 2,
+                "virtualMachines": []
+            },
+            "sku": {
+                "name": "Aligned"
+            }
+        }
+    ],
+    "outputs": {}
+}

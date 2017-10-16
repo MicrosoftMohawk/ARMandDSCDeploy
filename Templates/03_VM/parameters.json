@@ -5,9 +5,9 @@
         "location": {
             "value": "eastus"
         },
-        "virtualMachineName": {
-            "value": "vm1"
-        },
+        //"virtualMachineName": {
+        //    "value": "vm1"
+        //},
         "virtualMachineSize": {
             "value": "Standard_DS1_v2"
         },
@@ -17,9 +17,9 @@
         "virtualNetworkName": {
             "value": "vnet1"
         },
-        "networkInterfaceName": {
-            "value": "vm1341"
-        },
+        //"networkInterfaceName": {
+        //    "value": "vm1341"
+        //},
         //"adminPassword": {
         //    "value": null
         //},
