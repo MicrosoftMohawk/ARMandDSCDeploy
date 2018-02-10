@@ -1,11 +1,44 @@
 Login-AzureRMAccount
 
-$sp = New-AzureRmADServicePrincipal -DisplayName exampleapp -Password "{provide-password}"
-Sleep 20
-New-AzureRmRoleAssignment -RoleDefinitionName Contributor -ServicePrincipalName $sp.ApplicationId
+$spParams = @{
+    DisplayName = exampleapp 
+    Password    = "{provide-password}"
+}
 
-$creds = Get-Credential -UserName "SP_DSCEA-SI"
+$sp = New-AzureRmADServicePrincipal @spParams
 
-$secpasswd = ConvertTo-SecureString "mmy8V6nOcOyGX0B" -AsPlainText -Force
-$mycreds = New-Object System.Management.Automation.PSCredential ("768835e9-73f7-4a04-a5c4-b68c43b11477", $secpasswd)
-Login-AzureRmAccount -Credential $mycreds -ServicePrincipal -TenantId 72f988bf-86f1-41af-91ab-2d7cd011db47
+$SleepParams = @{
+    Seconds = 20
+}
+
+Start-Sleep @SleepParams
+
+$AzureRoleAssignmentParams = @{
+    RoleDefinitionName   = Contributor 
+    ServicePrincipalName = $sp.ApplicationId
+}
+
+New-AzureRmRoleAssignment @AzureRoleAssignmentParams
+
+$secpasswdParams = @{
+    String      = "mmy8V6nOcOyGX0B" 
+    AsPlainText = $true 
+    Force       = $true
+}
+
+$secpasswd = ConvertTo-SecureString @secpasswdParams
+
+$mycredsParams = @{
+    TypeName     = System.Management.Automation.PSCredential 
+    ArgumentList = ("768835e9-73f7-4a04-a5c4-b68c43b11477", $secpasswd)
+}
+
+$mycreds = New-Object @mycredsParams
+
+$AzureRMAccountParams = @{
+    Credential       = $mycreds 
+    ServicePrincipal = $true 
+    TenantId         = 72f988bf-86f1-41af-91ab-2d7cd011db47
+}
+
+Login-AzureRmAccount @AzureRMAccountParams

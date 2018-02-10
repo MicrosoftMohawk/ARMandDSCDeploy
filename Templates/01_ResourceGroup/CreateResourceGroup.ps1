@@ -1,1 +1,5 @@
-New-AzureRMResourceGroup -Name "AzureARMTesting" -Location "eastus2"
+$ResourceGroupParams = @{
+    Name     = "AzureARMTesting"
+    Location = "eastus2"
+}
+New-AzureRMResourceGroup @ResourceGroupParams
